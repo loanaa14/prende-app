@@ -1,8 +1,7 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function Feed({ clubId }: { clubId: string }) {
-  const supabase = createServerComponentClient({ cookies });
+const supabase = await createClient();
 
   const { data: posts } = await supabase
     .from("posts")

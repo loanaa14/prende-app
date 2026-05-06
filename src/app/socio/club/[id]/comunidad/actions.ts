@@ -1,82 +1,111 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/server";
 
-export async function createCommunityPost(formData: FormData) {
-  const supabase = createServerComponentClient({ cookies });
+export async function getPosts(clubId: string) {
+  const supabase = await createClient();
 
-  const clubId = formData.get("club_id") as string;
-  const content = formData.get("content") as string;
+  const { data, error } = await supabase
+    .from("community_posts")
+    .select("*")
+    .eq("club_id", clubId)
+    .order("is_pinned", { ascending: false })
+    .order("created_at", { ascending: false });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (error) {
+    console.error("GET POSTS ERROR:", error);
+    return [];
+  }
 
-  if (!user || !clubId || !content.trim()) return;
-
-  await supabase.from("community_posts").insert({
-    club_id: clubId,
-    user_id: user.id,
-    content: content.trim(),
-  });
-
-  revalidatePath(`/socio/club/${clubId}/comunidad`);
+  return data ?? [];
 }
 
-export async function toggleCommunityLike(formData: FormData) {
-  const supabase = createServerComponentClient({ cookies });
+export async function createCommunityPost(formData: FormData) {
+  const supabase = await createClient();
 
-  const postId = formData.get("post_id") as string;
-  const clubId = formData.get("club_id") as string;
+  const clubId = String(formData.get("club_id") || "");
+  const content = String(formData.get("content") || "").trim();
+
+  if (!clubId || !content) return;
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user || !postId) return;
+  if (!user) return;
 
-  const { data: existingLike } = await supabase
-    .from("community_post_likes")
-    .select("id")
-    .eq("post_id", postId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { error } = await supabase.from("community_posts").insert({
+    club_id: clubId,
+    user_id: user.id,
+    content,
+    is_pinned: false,
+  });
 
-  if (existingLike) {
-    await supabase
-      .from("community_post_likes")
-      .delete()
-      .eq("id", existingLike.id);
-  } else {
-    await supabase.from("community_post_likes").insert({
-      post_id: postId,
-      user_id: user.id,
-    });
+  if (error) {
+    console.error("CREATE COMMUNITY POST ERROR:", error);
+    return;
   }
 
   revalidatePath(`/socio/club/${clubId}/comunidad`);
 }
 
-export async function createCommunityComment(formData: FormData) {
-  const supabase = createServerComponentClient({ cookies });
+export async function createPost(formData: FormData) {
+  return createCommunityPost(formData);
+}
 
-  const postId = formData.get("post_id") as string;
-  const clubId = formData.get("club_id") as string;
-  const content = formData.get("content") as string;
+export async function togglePin(formData: FormData) {
+  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const postId = String(formData.get("id") || "");
+  const clubId = String(formData.get("club_id") || "");
 
-  if (!user || !postId || !content.trim()) return;
+  if (!postId || !clubId) return;
 
-  await supabase.from("community_comments").insert({
-    post_id: postId,
-    user_id: user.id,
-    content: content.trim(),
-  });
+  const { data: post } = await supabase
+    .from("community_posts")
+    .select("is_pinned")
+    .eq("id", postId)
+    .eq("club_id", clubId)
+    .maybeSingle();
+
+  if (!post) return;
+
+  const { error } = await supabase
+    .from("community_posts")
+    .update({
+      is_pinned: !post.is_pinned,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", postId)
+    .eq("club_id", clubId);
+
+  if (error) {
+    console.error("TOGGLE PIN ERROR:", error);
+    return;
+  }
+
+  revalidatePath(`/socio/club/${clubId}/comunidad`);
+}
+
+export async function deletePost(formData: FormData) {
+  const supabase = await createClient();
+
+  const postId = String(formData.get("id") || "");
+  const clubId = String(formData.get("club_id") || "");
+
+  if (!postId || !clubId) return;
+
+  const { error } = await supabase
+    .from("community_posts")
+    .delete()
+    .eq("id", postId)
+    .eq("club_id", clubId);
+
+  if (error) {
+    console.error("DELETE POST ERROR:", error);
+    return;
+  }
 
   revalidatePath(`/socio/club/${clubId}/comunidad`);
 }
