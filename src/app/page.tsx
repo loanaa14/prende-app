@@ -108,7 +108,7 @@ export default function HomePage() {
               width: "100%",
             }}
           >
-            <Link href="/login?role=club&mode=signup" style={primaryButton}>
+            <Link href="/signup" style={primaryButton}>
               Empezá ya por $1500/mes
             </Link>
 
