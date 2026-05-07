@@ -49,30 +49,71 @@ export async function POST(request: Request) {
 
     const status = payment.status;
     const metadata: any = payment.metadata || {};
-    const feeId = payment.external_reference || metadata.fee_id;
+    const paymentType = metadata.type;
 
     console.log("MP PAYMENT RECEIVED:", {
       paymentId: payment.id,
       status,
-      feeId,
+      paymentType,
       metadata,
       external_reference: payment.external_reference,
     });
 
-    if (status === "approved" && feeId) {
-      const { error } = await supabaseAdmin
-        .from("member_fees")
-        .update({
-          status: "pagada",
-          paid_at: new Date().toISOString(),
-          mercado_pago_payment_id: String(payment.id),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", String(feeId));
+    if (status !== "approved") {
+      return NextResponse.json({ ok: true });
+    }
 
-      if (error) {
-        console.error("ERROR UPDATING MEMBER FEE:", error);
+    if (paymentType === "member_fee") {
+      const feeId = payment.external_reference || metadata.fee_id;
+
+      if (feeId) {
+        const { error } = await supabaseAdmin
+          .from("member_fees")
+          .update({
+            status: "pagada",
+            paid_at: new Date().toISOString(),
+            mercado_pago_payment_id: String(payment.id),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", String(feeId));
+
+        if (error) {
+          console.error("ERROR UPDATING MEMBER FEE:", error);
+        }
       }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    if (
+      paymentType === "subscription" ||
+      paymentType === "onboarding_subscription"
+    ) {
+      const subscriptionId =
+        payment.external_reference || metadata.subscription_id;
+
+      if (subscriptionId) {
+        const now = new Date();
+        const periodEnd = new Date();
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        const { error } = await supabaseAdmin
+          .from("subscriptions")
+          .update({
+            status: "active",
+            mercado_pago_payment_id: String(payment.id),
+            current_period_start: now.toISOString(),
+            current_period_end: periodEnd.toISOString(),
+            updated_at: now.toISOString(),
+          })
+          .eq("id", String(subscriptionId));
+
+        if (error) {
+          console.error("ERROR UPDATING SUBSCRIPTION:", error);
+        }
+      }
+
+      return NextResponse.json({ ok: true });
     }
 
     return NextResponse.json({ ok: true });

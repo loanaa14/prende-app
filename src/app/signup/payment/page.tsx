@@ -42,21 +42,41 @@ export default function SignupPaymentPage() {
     );
   }, [router]);
 
-  function handleActivate() {
-    localStorage.setItem(
-      "prende_onboarding_payment",
-      JSON.stringify({
-        method: "mercadopago",
-        plan: "Prendé",
-        amount: 1500,
-        currency: "UYU",
-        saved_at: new Date().toISOString(),
-      })
-    );
+async function handleActivate() {
+  try {
+    const accessRaw = localStorage.getItem("prende_onboarding_access");
+    const clubRaw = localStorage.getItem("prende_onboarding_club");
 
-    router.push("/signup/success");
+    if (!accessRaw || !clubRaw) {
+      alert("Faltan datos del registro. Volvé a completar el formulario.");
+      router.push("/signup");
+      return;
+    }
+
+    const response = await fetch("/api/onboarding/create-preference", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        access: JSON.parse(accessRaw),
+        club: JSON.parse(clubRaw),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data?.init_point) {
+      alert(data?.error || "No se pudo iniciar Mercado Pago.");
+      return;
+    }
+
+    window.location.href = data.init_point;
+  } catch (error) {
+    console.error(error);
+    alert("Ocurrió un error al iniciar Mercado Pago.");
   }
-
+}
   return (
     <main style={mainStyle}>
       <section style={sectionStyle}>
