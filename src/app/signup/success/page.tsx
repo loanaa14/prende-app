@@ -1,17 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { CheckCircle2 } from "lucide-react";
 
 export default function SignupSuccessPage() {
+  return (
+    <Suspense fallback={<main style={mainStyle}>Cargando...</main>}>
+      <SignupSuccessContent />
+    </Suspense>
+  );
+}
+
+function SignupSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
 
   const [loading, setLoading] = useState(false);
-
   const clubIdFromUrl = searchParams.get("clubId");
 
   async function goToClubPanel() {
