@@ -48,13 +48,48 @@ export default async function ClubPage({ params }: any) {
           <div style={brand}>Prendé</div>
 
           <nav style={nav}>
-            <Nav href={`/club/${params.id}`} icon={<Home size={17} />} text="Panel" active />
-            <Nav href={`/club/${params.id}/invite-member`} icon={<Users size={17} />} text="Socios" />
-            <Nav href={`/club/${params.id}/payments`} icon={<CreditCard size={17} />} text="Pagos" />
-            <Nav href={`/club/${params.id}/inventory`} icon={<Boxes size={17} />} text="Inventario" />
-            <Nav href={`/club/${params.id}/community`} icon={<MessageCircle size={17} />} text="Comunidad" />
-            <Nav href={`/club/${params.id}/payments`} icon={<BarChart3 size={17} />} text="Reportes" />
-            <Nav href={`/club/${params.id}/settings`} icon={<Settings size={17} />} text="Ajustes" />
+            <Nav
+              href={`/club/${params.id}`}
+              icon={<Home size={17} />}
+              text="Panel"
+              active
+            />
+
+            <Nav
+              href={`/club/${params.id}/members`}
+              icon={<Users size={17} />}
+              text="Socios"
+            />
+
+            <Nav
+              href={`/club/${params.id}/payments`}
+              icon={<CreditCard size={17} />}
+              text="Pagos"
+            />
+
+            <Nav
+              href={`/club/${params.id}/inventory`}
+              icon={<Boxes size={17} />}
+              text="Inventario"
+            />
+
+            <Nav
+              href={`/club/${params.id}/community`}
+              icon={<MessageCircle size={17} />}
+              text="Comunidad"
+            />
+
+            <Nav
+              href={`/club/${params.id}/payments`}
+              icon={<BarChart3 size={17} />}
+              text="Reportes"
+            />
+
+            <Nav
+              href={`/club/${params.id}/settings`}
+              icon={<Settings size={17} />}
+              text="Ajustes"
+            />
           </nav>
         </div>
 
@@ -101,7 +136,10 @@ export default async function ClubPage({ params }: any) {
             <div style={cardHeader}>
               <h2 style={cardTitle}>Actividad reciente</h2>
 
-              <Link href={`/club/${params.id}/payments`} style={cardLink}>
+              <Link
+                href={`/club/${params.id}/payments`}
+                style={cardLink}
+              >
                 Ver todo →
               </Link>
             </div>
@@ -143,7 +181,10 @@ export default async function ClubPage({ params }: any) {
               <p style={noticeText}>8 vencen esta semana</p>
             </div>
 
-            <Link href={`/club/${params.id}/payments`} style={cardLink}>
+            <Link
+              href={`/club/${params.id}/payments`}
+              style={cardLink}
+            >
               Ver pagos →
             </Link>
           </div>
