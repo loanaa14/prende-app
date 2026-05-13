@@ -24,6 +24,8 @@ const activity = [
 ];
 
 export default async function ClubPage({ params }: any) {
+  const { id } = await params;
+
   const supabase = await createClient();
 
   const {
@@ -35,10 +37,10 @@ export default async function ClubPage({ params }: any) {
   const { data: club } = await supabase
     .from("clubs")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
-  const theme = await getClubTheme(params.id);
+  const theme = await getClubTheme(id);
   const clubName = theme.name || club?.name || "Club";
 
   return (
@@ -48,48 +50,13 @@ export default async function ClubPage({ params }: any) {
           <div style={brand}>Prendé</div>
 
           <nav style={nav}>
-            <Nav
-              href={`/club/${params.id}`}
-              icon={<Home size={17} />}
-              text="Panel"
-              active
-            />
-
-            <Nav
-              href={`/club/${params.id}/members`}
-              icon={<Users size={17} />}
-              text="Socios"
-            />
-
-            <Nav
-              href={`/club/${params.id}/payments`}
-              icon={<CreditCard size={17} />}
-              text="Pagos"
-            />
-
-            <Nav
-              href={`/club/${params.id}/inventory`}
-              icon={<Boxes size={17} />}
-              text="Inventario"
-            />
-
-            <Nav
-              href={`/club/${params.id}/community`}
-              icon={<MessageCircle size={17} />}
-              text="Comunidad"
-            />
-
-            <Nav
-              href={`/club/${params.id}/payments`}
-              icon={<BarChart3 size={17} />}
-              text="Reportes"
-            />
-
-            <Nav
-              href={`/club/${params.id}/settings`}
-              icon={<Settings size={17} />}
-              text="Ajustes"
-            />
+            <Nav href={`/club/${id}`} icon={<Home size={17} />} text="Panel" active />
+            <Nav href={`/club/${id}/members`} icon={<Users size={17} />} text="Socios" />
+            <Nav href={`/club/${id}/payments`} icon={<CreditCard size={17} />} text="Pagos" />
+            <Nav href={`/club/${id}/inventory`} icon={<Boxes size={17} />} text="Inventario" />
+            <Nav href={`/club/${id}/community`} icon={<MessageCircle size={17} />} text="Comunidad" />
+            <Nav href={`/club/${id}/payments`} icon={<BarChart3 size={17} />} text="Reportes" />
+            <Nav href={`/club/${id}/settings`} icon={<Settings size={17} />} text="Ajustes" />
           </nav>
         </div>
 
@@ -136,10 +103,7 @@ export default async function ClubPage({ params }: any) {
             <div style={cardHeader}>
               <h2 style={cardTitle}>Actividad reciente</h2>
 
-              <Link
-                href={`/club/${params.id}/payments`}
-                style={cardLink}
-              >
+              <Link href={`/club/${id}/payments`} style={cardLink}>
                 Ver todo →
               </Link>
             </div>
@@ -181,10 +145,7 @@ export default async function ClubPage({ params }: any) {
               <p style={noticeText}>8 vencen esta semana</p>
             </div>
 
-            <Link
-              href={`/club/${params.id}/payments`}
-              style={cardLink}
-            >
+            <Link href={`/club/${id}/payments`} style={cardLink}>
               Ver pagos →
             </Link>
           </div>
@@ -208,7 +169,6 @@ function KpiCard({ icon, title, value, sub }: any) {
     <div style={kpiCard}>
       <div style={kpiTop}>
         <div style={kpiIcon}>{icon}</div>
-
         <p style={kpiTitle}>{title}</p>
       </div>
 

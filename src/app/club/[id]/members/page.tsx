@@ -81,7 +81,7 @@ export default async function MembersPage({ params }: any) {
         <header style={header}>
           <h1 style={title}>Socios</h1>
 
-          <Link href={`/club/${id}/invite-member`} style={primaryButton}>
+          <Link href={`/club/${id}/new-member`} style={primaryButton}>
             <UserPlus size={17} />
             Agregar socio
           </Link>
