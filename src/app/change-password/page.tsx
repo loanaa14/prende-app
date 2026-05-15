@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
@@ -8,10 +9,12 @@ const supabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default function AcceptInvitationPage() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+export default function ChangePasswordPage() {
+  const searchParams = useSearchParams();
+  const clubId = searchParams.get("clubId");
+
+  const [password, setPassword] = useState("");
+  const [repeatPassword, setRepeatPassword] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,43 +25,29 @@ export default function AcceptInvitationPage() {
     setLoading(true);
     setError("");
 
-    try {
-      const res = await fetch("/api/invitations/accept", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fullName,
-          email,
-          code,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "No se pudo aceptar la invitación");
-        setLoading(false);
-        return;
-      }
-
-      const { error: loginError } = await supabaseClient.auth.signInWithPassword({
-        email: data.email,
-        password: data.tempPassword,
-      });
-
-      if (loginError) {
-        setError("Acceso creado, pero no se pudo iniciar sesión automáticamente.");
-        setLoading(false);
-        return;
-      }
-
-      window.location.href = data.redirectTo;
-    } catch {
-      setError("Error al conectar con el servidor");
+    if (password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
       setLoading(false);
+      return;
     }
+
+    if (password !== repeatPassword) {
+      setError("Las contraseñas no coinciden.");
+      setLoading(false);
+      return;
+    }
+
+    const { error: updateError } = await supabaseClient.auth.updateUser({
+      password,
+    });
+
+    if (updateError) {
+      setError(updateError.message || "No se pudo cambiar la contraseña.");
+      setLoading(false);
+      return;
+    }
+
+    window.location.href = clubId ? `/club/${clubId}` : "/dashboard";
   }
 
   return (
@@ -66,36 +55,27 @@ export default function AcceptInvitationPage() {
       <section style={card}>
         <p style={brand}>Prendé</p>
 
-        <h1 style={title}>Aceptar invitación</h1>
+        <h1 style={title}>Creá tu contraseña</h1>
 
         <p style={subtitle}>
-          Ingresá tu correo y el código que te compartió el club.
+          Para proteger tu acceso, elegí una contraseña nueva antes de entrar al club.
         </p>
 
         <form onSubmit={handleSubmit} style={form}>
           <input
-            type="text"
-            placeholder="Nombre completo"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
+            type="password"
+            placeholder="Nueva contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             style={input}
             required
           />
 
           <input
-            type="email"
-            placeholder="Correo electrónico"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={input}
-            required
-          />
-
-          <input
-            type="text"
-            placeholder="Código de invitación"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
+            type="password"
+            placeholder="Repetir contraseña"
+            value={repeatPassword}
+            onChange={(e) => setRepeatPassword(e.target.value)}
             style={input}
             required
           />
@@ -103,7 +83,7 @@ export default function AcceptInvitationPage() {
           {error && <div style={errorBox}>{error}</div>}
 
           <button type="submit" disabled={loading} style={button}>
-            {loading ? "Verificando..." : "Entrar al club"}
+            {loading ? "Guardando..." : "Guardar y entrar"}
           </button>
         </form>
       </section>

@@ -10,75 +10,81 @@ export default async function InviteMemberPage({ params }: any) {
   const { id } = await params;
 
   return (
-    <main style={page}>
-      <section style={card}>
-        <Link href={`/club/${id}/members`} style={backLink}>
-          <ArrowLeft size={17} />
-          Volver a socios
-        </Link>
+    <>
+      <style>{`
+        .placeholder::placeholder {
+          color: rgba(255,255,255,0.35);
+        }
+      `}</style>
 
-        <div style={iconBox}>
-          <UserPlus size={30} color="#8BE000" />
-        </div>
+      <main style={page}>
+        <section style={card}>
+          <Link href={`/club/${id}/members`} style={backLink}>
+            <ArrowLeft size={17} />
+            Volver a socios
+          </Link>
 
-        <h1 style={title}>Agregar socio</h1>
-
-        <p style={subtitle}>
-          Invitá a una persona para que pueda acceder al espacio privado del club.
-        </p>
-
-        <form method="POST" action={`/club/${id}/invite-member`} style={form}>
-          <label style={label}>Correo electrónico</label>
-
-          <div style={inputBox}>
-            <Mail size={17} color="#8B8B8B" />
-
-            <input
-              name="email"
-              type="email"
-              required
-              placeholder="socio@email.com"
-              autoComplete="off"
-              spellCheck={false}
-              style={{
-                ...input,
-                background: "transparent",
-                backgroundColor: "transparent",
-                WebkitBoxShadow: "0 0 0 1000px #0B0B0B inset",
-                WebkitTextFillColor: "#FFFFFF",
-                caretColor: "#8BE000",
-              }}
-            />
+          <div style={iconBox}>
+            <UserPlus size={30} color="#8BE000" />
           </div>
 
-          <label style={label}>Rol</label>
+          <h1 style={title}>Agregar socio</h1>
 
-          <div style={inputBox}>
-            <ShieldCheck size={17} color="#8B8B8B" />
+          <p style={subtitle}>
+            Invitá a una persona para que pueda acceder al espacio privado del club.
+          </p>
 
-            <select name="role" defaultValue="socio" style={selectInput}>
-              <option
-                value="socio"
-                style={{ background: "#111", color: "#fff" }}
-              >
-                Socio
-              </option>
+          <form
+            method="POST"
+            action={`/club/${id}/invite-member`}
+            style={form}
+          >
+            <label style={label}>Correo electrónico</label>
 
-              <option
-                value="admin"
-                style={{ background: "#111", color: "#fff" }}
-              >
-                Administrador
-              </option>
-            </select>
-          </div>
+            <div style={inputBox}>
+              <Mail size={17} color="#8B8B8B" />
 
-          <button type="submit" style={button}>
-            Enviar invitación
-          </button>
-        </form>
-      </section>
-    </main>
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="socio@email.com"
+                autoComplete="off"
+                spellCheck={false}
+                className="placeholder"
+                style={emailInput}
+              />
+            </div>
+
+            <label style={label}>Rol</label>
+
+            <div style={inputBox}>
+              <ShieldCheck size={17} color="#8B8B8B" />
+
+              <select name="role" defaultValue="socio" style={selectInput}>
+                <option
+                  value="socio"
+                  style={{ backgroundColor: "#111", color: "#fff" }}
+                >
+                  Socio
+                </option>
+
+                <option
+                  value="admin"
+                  style={{ backgroundColor: "#111", color: "#fff" }}
+                >
+                  Administrador
+                </option>
+              </select>
+            </div>
+
+            <button type="submit" style={button}>
+              Enviar invitación
+            </button>
+          </form>
+        </section>
+      </main>
+    </>
   );
 }
 
@@ -96,7 +102,7 @@ const page: React.CSSProperties = {
 const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 520,
-  background: "#101010",
+  backgroundColor: "#101010",
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 28,
   padding: 30,
@@ -116,7 +122,7 @@ const iconBox: React.CSSProperties = {
   width: 62,
   height: 62,
   borderRadius: 20,
-  background: "rgba(139,224,0,0.12)",
+  backgroundColor: "rgba(139,224,0,0.12)",
   display: "grid",
   placeItems: "center",
   marginBottom: 18,
@@ -150,7 +156,7 @@ const inputBox: React.CSSProperties = {
   display: "flex",
   gap: 10,
   alignItems: "center",
-  background: "#0B0B0B",
+  backgroundColor: "#0B0B0B",
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 16,
   padding: "0 14px",
@@ -159,7 +165,7 @@ const inputBox: React.CSSProperties = {
 
 const input: React.CSSProperties = {
   width: "100%",
-  background: "transparent",
+  backgroundColor: "transparent",
   border: "none",
   outline: "none",
   boxShadow: "none",
@@ -170,6 +176,13 @@ const input: React.CSSProperties = {
   WebkitAppearance: "none",
 };
 
+const emailInput: React.CSSProperties = {
+  ...input,
+  WebkitTextFillColor: "#FFFFFF",
+  caretColor: "#8BE000",
+  color: "#FFFFFF",
+};
+
 const selectInput: React.CSSProperties = {
   ...input,
   cursor: "pointer",
@@ -177,7 +190,7 @@ const selectInput: React.CSSProperties = {
 
 const button: React.CSSProperties = {
   marginTop: 10,
-  background: "#8BE000",
+  backgroundColor: "#8BE000",
   color: "#050505",
   border: "none",
   borderRadius: 16,

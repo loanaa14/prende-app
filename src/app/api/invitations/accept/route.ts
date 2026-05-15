@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { adminClient } from "@/lib/supabase/admin";
+import { createClient } from "@supabase/supabase-js";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const adminClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    message: "API invitations accept funcionando",
+  });
+}
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-
     const body = await req.json();
 
     const email = String(body.email || "").trim().toLowerCase();
@@ -13,13 +25,10 @@ export async function POST(req: Request) {
     const fullName = String(body.fullName || "").trim();
 
     if (!email || !code || !fullName) {
-      return NextResponse.json(
-        { error: "Faltan datos" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
 
-    const { data: invitation, error: invitationError } = await supabase
+    const { data: invitation, error: invitationError } = await adminClient
       .from("invitations")
       .select("*")
       .eq("email", email)
@@ -28,10 +37,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (invitationError || !invitation) {
-      return NextResponse.json(
-        { error: "Código inválido" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Código inválido" }, { status: 400 });
     }
 
     if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
@@ -43,9 +49,10 @@ export async function POST(req: Request) {
 
     const tempPassword =
       Math.random().toString(36).slice(2) +
-      Math.random().toString(36).slice(2);
+      Math.random().toString(36).slice(2) +
+      "A1!";
 
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile } = await adminClient
       .from("profiles")
       .select("id")
       .eq("email", email)
@@ -65,24 +72,28 @@ export async function POST(req: Request) {
         });
 
       if (createUserError || !createdUser.user) {
-        console.error("CREATE USER ERROR:", createUserError);
-
         return NextResponse.json(
-          { error: "No se pudo crear el usuario" },
+          { error: createUserError?.message || "No se pudo crear el usuario" },
           { status: 500 }
         );
       }
 
       userId = createdUser.user.id;
 
-      await supabase.from("profiles").upsert({
+      await adminClient.from("profiles").upsert({
+        id: userId,
+        email,
+        full_name: fullName,
+      });
+    } else {
+      await adminClient.from("profiles").upsert({
         id: userId,
         email,
         full_name: fullName,
       });
     }
 
-    const { data: existingMembership } = await supabase
+    const { data: existingMembership } = await adminClient
       .from("memberships")
       .select("id")
       .eq("club_id", invitation.club_id)
@@ -90,7 +101,7 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (!existingMembership) {
-      const { error: membershipError } = await supabase
+      const { error: membershipError } = await adminClient
         .from("memberships")
         .insert({
           club_id: invitation.club_id,
@@ -100,16 +111,14 @@ export async function POST(req: Request) {
         });
 
       if (membershipError) {
-        console.error("MEMBERSHIP ERROR:", membershipError);
-
         return NextResponse.json(
-          { error: "No se pudo crear el acceso" },
+          { error: membershipError.message || "No se pudo crear el acceso" },
           { status: 500 }
         );
       }
     }
 
-    await supabase
+    await adminClient
       .from("invitations")
       .update({
         status: "accepted",
@@ -119,14 +128,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      redirectTo: "/login",
+      email,
       tempPassword,
+      clubId: invitation.club_id,
+      redirectTo: `/change-password?clubId=${invitation.club_id}`,
     });
-  } catch (error) {
-    console.error("ACCEPT INVITATION ERROR:", error);
-
+  } catch (error: any) {
     return NextResponse.json(
-      { error: "Error interno" },
+      { error: error?.message || "Error interno" },
       { status: 500 }
     );
   }

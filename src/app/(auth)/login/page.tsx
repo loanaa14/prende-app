@@ -10,20 +10,35 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const handleLogin = async (e: any) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    setLoading(true);
+    setErrorMessage("");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      alert(error.message);
+    if (error || !data.user) {
+      setErrorMessage("Email o contraseña incorrectos.");
       setLoading(false);
+      return;
+    }
+
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("club_id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+
+    if (membership?.club_id) {
+      router.push(`/club/${membership.club_id}`);
       return;
     }
 
@@ -31,56 +46,129 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FBF9F6] px-6">
-      <div className="w-full max-w-md bg-white border rounded-xl p-6">
-        <h1 className="text-2xl font-bold text-[#1E293B]">
-          Ingresar a Prendé
-        </h1>
+    <main style={page}>
+      <section style={card}>
+        <p style={brand}>Prendé</p>
 
-        <p className="text-sm text-gray-600 mt-2">
+        <h1 style={title}>Ingresar</h1>
+
+        <p style={subtitle}>
           Acceso privado para clubes y socios.
         </p>
 
-        <form onSubmit={handleLogin} className="space-y-4 mt-6">
-          <div>
-            <label className="block text-sm font-medium">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border rounded p-2"
-              placeholder="tu@email.com"
-            />
-          </div>
+        <form onSubmit={handleLogin} style={form}>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={input}
+            placeholder="Correo electrónico"
+          />
 
-          <div>
-            <label className="block text-sm font-medium">Contraseña</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border rounded p-2"
-              placeholder="********"
-            />
-          </div>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={input}
+            placeholder="Contraseña"
+          />
 
-          <button
-            disabled={loading}
-            className="w-full bg-[#76A889] text-white rounded p-2"
-          >
-            {loading ? "Ingresando..." : "Ingresar"}
+          {errorMessage && (
+            <div style={errorBox}>{errorMessage}</div>
+          )}
+
+          <button disabled={loading} style={button}>
+            {loading ? "Ingresando..." : "Entrar"}
           </button>
         </form>
 
-        <a
-          href="/signup"
-          className="block text-sm text-[#76A889] mt-4 text-center"
-        >
+        <a href="/signup" style={link}>
           Crear cuenta
         </a>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
+
+const page: React.CSSProperties = {
+  minHeight: "100vh",
+  background:
+    "radial-gradient(circle at top right, rgba(139,224,0,0.12), transparent 30%), #050505",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+const card: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 430,
+  backgroundColor: "#101010",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 28,
+  padding: 30,
+};
+
+const brand: React.CSSProperties = {
+  margin: 0,
+  color: "#8BE000",
+  fontWeight: 950,
+};
+
+const title: React.CSSProperties = {
+  margin: "14px 0 0",
+  color: "#FFFFFF",
+  fontSize: 38,
+  fontWeight: 950,
+};
+
+const subtitle: React.CSSProperties = {
+  margin: "10px 0 0",
+  color: "#9B9B9B",
+  lineHeight: 1.6,
+};
+
+const form: React.CSSProperties = {
+  marginTop: 28,
+  display: "grid",
+  gap: 14,
+};
+
+const input: React.CSSProperties = {
+  backgroundColor: "#0B0B0B",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 16,
+  padding: 16,
+  color: "#FFFFFF",
+  outline: "none",
+  fontWeight: 700,
+};
+
+const button: React.CSSProperties = {
+  backgroundColor: "#8BE000",
+  color: "#050505",
+  border: "none",
+  borderRadius: 16,
+  padding: 16,
+  fontWeight: 950,
+  cursor: "pointer",
+};
+
+const errorBox: React.CSSProperties = {
+  backgroundColor: "rgba(255,107,107,0.10)",
+  border: "1px solid rgba(255,107,107,0.22)",
+  color: "#FF6B6B",
+  borderRadius: 14,
+  padding: 12,
+};
+
+const link: React.CSSProperties = {
+  display: "block",
+  marginTop: 18,
+  color: "#8BE000",
+  textAlign: "center",
+  textDecoration: "none",
+  fontWeight: 800,
+};
