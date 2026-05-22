@@ -1,75 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useRef, useState } from "react";
+
 import SocioShell from "@/components/socio/SocioShell";
+
+import { createClient } from "@/lib/supabase/client";
+
 import {
+  Camera,
   CreditCard,
-  Calendar,
-  CheckCircle,
-  AlertCircle,
+  Mail,
+  Phone,
+  ShieldCheck,
   User,
 } from "lucide-react";
 
-export default function SocioHomePage() {
+export default function PerfilPage() {
   const supabase = createClient();
 
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [club, setClub] = useState<any>(null);
-  const [membership, setMembership] = useState<any>(null);
-  const [fees, setFees] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const fileInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [profile, setProfile] =
+    useState<any>(null);
+
+  const [membership, setMembership] =
+    useState<any>(null);
+
+  const [avatarFile, setAvatarFile] =
+    useState<File | null>(null);
+
+  const [fullName, setFullName] =
+    useState("");
+
+  const [phone, setPhone] =
+    useState("");
 
   async function loadData() {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const currentUser = sessionData.session?.user;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!currentUser) {
+    if (!user) {
       setLoading(false);
       return;
     }
 
-    setUser(currentUser);
+    const [profileRes, membershipRes] =
+      await Promise.all([
+        supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle(),
 
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("username, avatar_url")
-      .eq("id", currentUser.id)
-      .maybeSingle();
+        supabase
+          .from("memberships")
+          .select(
+            `
+              *,
+              clubs(name)
+            `
+          )
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .maybeSingle(),
+      ]);
 
-    setProfile(profileData);
+    setProfile(profileRes.data);
 
-    const { data: membershipData } = await supabase
-      .from("memberships")
-      .select("*")
-      .eq("user_id", currentUser.id)
-      .eq("status", "active")
-      .maybeSingle();
+    setMembership(membershipRes.data);
 
-    setMembership(membershipData);
+    setFullName(
+      profileRes.data?.full_name ||
+        ""
+    );
 
-    if (!membershipData?.club_id) {
-      setLoading(false);
-      return;
-    }
+    setPhone(
+      profileRes.data?.phone || ""
+    );
 
-    const { data: clubData } = await supabase
-      .from("clubs")
-      .select("*")
-      .eq("id", membershipData.club_id)
-      .maybeSingle();
-
-    setClub(clubData);
-
-    const { data: feeData } = await supabase
-      .from("member_fees")
-      .select("*")
-      .eq("club_id", membershipData.club_id)
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false });
-
-    setFees(feeData ?? []);
     setLoading(false);
   }
 
@@ -77,332 +95,632 @@ export default function SocioHomePage() {
     loadData();
   }, []);
 
-  function formatDate(date?: string) {
-    if (!date) return "Sin fecha";
-    return new Date(date).toLocaleDateString("es-UY");
+  async function uploadAvatar(
+    file: File,
+    userId: string
+  ) {
+    const fileName = `${userId}/${Date.now()}-${
+      file.name
+    }`;
+
+    const { error } = await supabase.storage
+      .from("avatars")
+      .upload(fileName, file, {
+        upsert: true,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
   }
 
-  function getStatus(status?: string) {
-    if (status === "activa" || status === "pagada") {
-      return {
-        label: "Activa",
-        bg: "#ECFDF3",
-        color: "#166534",
-        icon: <CheckCircle size={18} />,
-      };
-    }
+  async function saveProfile() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (status === "vencida") {
-      return {
-        label: "Vencida",
-        bg: "#FEF2F2",
-        color: "#991B1B",
-        icon: <AlertCircle size={18} />,
-      };
-    }
+    if (!user) return;
 
-    return {
-      label: "Pendiente",
-      bg: "#FFF7ED",
-      color: "#9A3412",
-      icon: <AlertCircle size={18} />,
-    };
+    setSaving(true);
+
+    try {
+      let avatarUrl =
+        profile?.avatar_url || "";
+
+      if (avatarFile) {
+        avatarUrl =
+          await uploadAvatar(
+            avatarFile,
+            user.id
+          );
+      }
+
+      const { error } =
+        await supabase
+          .from("profiles")
+          .update({
+            full_name:
+              fullName.trim(),
+
+            phone:
+              phone.trim(),
+
+            avatar_url:
+              avatarUrl || null,
+          })
+          .eq("id", user.id);
+
+      if (error) {
+        alert(error.message);
+
+        setSaving(false);
+
+        return;
+      }
+
+      await loadData();
+
+      setSaving(false);
+
+      alert(
+        "Perfil actualizado."
+      );
+    } catch (err: any) {
+      alert(err.message);
+
+      setSaving(false);
+    }
   }
 
   if (loading) {
     return (
       <SocioShell>
-        <p>Cargando tu espacio privado...</p>
-      </SocioShell>
-    );
-  }
-
-  if (!membership?.club_id) {
-    return (
-      <SocioShell>
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #E5E1DA",
-            borderRadius: 28,
-            padding: 28,
-          }}
-        >
-          Todavía no perteneces a ningún club activo.
+        <div style={loadingBox}>
+          Cargando perfil...
         </div>
       </SocioShell>
     );
   }
 
-  const currentFee = fees[0];
-  const status = getStatus(currentFee?.status);
-  const username = profile?.username || user?.email || "socio";
+  const club = Array.isArray(
+    membership?.clubs
+  )
+    ? membership?.clubs[0]
+    : membership?.clubs;
 
   return (
-    <SocioShell clubId={membership.club_id}>
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        <section
-          style={{
-            background: "white",
-            border: "1px solid #E5E1DA",
-            borderRadius: 32,
-            padding: 30,
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                background: "#76A889",
-                color: "white",
-                display: "grid",
-                placeItems: "center",
-                overflow: "hidden",
-                flexShrink: 0,
-              }}
-            >
-              {profile?.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt="Avatar"
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+    <SocioShell>
+      <main style={page}>
+        <header style={header}>
+          <div style={heroIcon}>
+            <User size={26} />
+          </div>
+
+          <div>
+            <h1 style={title}>
+              Mi perfil
+            </h1>
+
+            <p style={subtitle}>
+              Gestioná tu información
+              personal y membresía.
+            </p>
+          </div>
+        </header>
+
+        <section style={grid}>
+          <div style={leftColumn}>
+            <div style={profileCard}>
+              <div style={avatarSection}>
+                <div
+                  style={{
+                    ...avatar,
+                    backgroundImage:
+                      profile?.avatar_url
+                        ? `url(${profile.avatar_url})`
+                        : undefined,
+                  }}
+                >
+                  {!profile?.avatar_url &&
+                    (
+                      fullName ||
+                      "S"
+                    )
+                      .slice(0, 1)
+                      .toUpperCase()}
+                </div>
+
+                <button
+                  style={
+                    uploadButton
+                  }
+                  onClick={() =>
+                    fileInputRef.current?.click()
+                  }
+                >
+                  <Camera
+                    size={16}
+                  />
+
+                  Cambiar foto
+                </button>
+
+                <input
+                  ref={
+                    fileInputRef
+                  }
+                  type="file"
+                  accept="image/*"
+                  style={{
+                    display:
+                      "none",
+                  }}
+                  onChange={(e) =>
+                    setAvatarFile(
+                      e.target
+                        .files?.[0] ||
+                        null
+                    )
+                  }
                 />
-              ) : (
-                <User size={30} />
-              )}
-            </div>
+              </div>
 
-            <div>
-              <p style={{ margin: 0, color: "#6B7280", fontSize: 14 }}>
-                Bienvenida a tu espacio privado
-              </p>
-              <h1 style={{ margin: 0, fontSize: 36, fontWeight: 800 }}>
-                Hola, @{username}
-              </h1>
-              <p style={{ margin: "6px 0 0", color: "#6B7280" }}>
-                Club: {club?.name ?? "Club"}
-              </p>
+              <div style={form}>
+                <div style={field}>
+                  <label
+                    style={label}
+                  >
+                    Nombre
+                  </label>
+
+                  <div
+                    style={
+                      inputWrapper
+                    }
+                  >
+                    <User
+                      size={16}
+                    />
+
+                    <input
+                      value={
+                        fullName
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        setFullName(
+                          e
+                            .target
+                            .value
+                        )
+                      }
+                      style={
+                        input
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div style={field}>
+                  <label
+                    style={label}
+                  >
+                    Email
+                  </label>
+
+                  <div
+                    style={
+                      disabledInput
+                    }
+                  >
+                    <Mail
+                      size={16}
+                    />
+
+                    {
+                      profile?.email
+                    }
+                  </div>
+                </div>
+
+                <div style={field}>
+                  <label
+                    style={label}
+                  >
+                    Teléfono
+                  </label>
+
+                  <div
+                    style={
+                      inputWrapper
+                    }
+                  >
+                    <Phone
+                      size={16}
+                    />
+
+                    <input
+                      value={
+                        phone
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        setPhone(
+                          e
+                            .target
+                            .value
+                        )
+                      }
+                      style={
+                        input
+                      }
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={
+                    saveProfile
+                  }
+                  disabled={
+                    saving
+                  }
+                  style={
+                    saveButton
+                  }
+                >
+                  {saving
+                    ? "Guardando..."
+                    : "Guardar cambios"}
+                </button>
+              </div>
             </div>
           </div>
-        </section>
 
-        <section
-          style={{
-            background: "white",
-            border: "1px solid #E5E1DA",
-            borderRadius: 32,
-            padding: 30,
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 18,
-                background: "#76A889",
-                color: "white",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <CreditCard size={26} />
-            </div>
-
-            <div>
-              <p style={{ margin: 0, color: "#6B7280", fontSize: 13 }}>
-                Cuota social
-              </p>
-              <h2 style={{ margin: 0, fontSize: 30, fontWeight: 800 }}>
-                Estado de cuenta
-              </h2>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 16,
-              marginTop: 24,
-            }}
-          >
-            <div
-              style={{
-                background: "#FBF9F6",
-                border: "1px solid #E5E1DA",
-                borderRadius: 22,
-                padding: 18,
-              }}
-            >
-              <p style={{ margin: 0, color: "#6B7280", fontSize: 13 }}>
-                Estado actual
-              </p>
-
+          <div style={rightColumn}>
+            <div style={membershipCard}>
               <div
-                style={{
-                  marginTop: 10,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: status.bg,
-                  color: status.color,
-                  borderRadius: 999,
-                  padding: "8px 12px",
-                  fontWeight: 800,
-                }}
+                style={
+                  membershipHeader
+                }
               >
-                {status.icon}
-                {status.label}
+                <ShieldCheck
+                  size={20}
+                />
+
+                Membresía
+              </div>
+
+              <div style={infoRow}>
+                <span
+                  style={
+                    infoLabel
+                  }
+                >
+                  Club
+                </span>
+
+                <span
+                  style={
+                    infoValue
+                  }
+                >
+                  {club?.name ||
+                    "-"}
+                </span>
+              </div>
+
+              <div style={infoRow}>
+                <span
+                  style={
+                    infoLabel
+                  }
+                >
+                  Estado
+                </span>
+
+                <span
+                  style={
+                    activeBadge
+                  }
+                >
+                  Activa
+                </span>
+              </div>
+
+              <div style={infoRow}>
+                <span
+                  style={
+                    infoLabel
+                  }
+                >
+                  Rol
+                </span>
+
+                <span
+                  style={
+                    infoValue
+                  }
+                >
+                  Socio
+                </span>
               </div>
             </div>
 
-            <div
-              style={{
-                background: "#FBF9F6",
-                border: "1px solid #E5E1DA",
-                borderRadius: 22,
-                padding: 18,
-              }}
-            >
-              <p style={{ margin: 0, color: "#6B7280", fontSize: 13 }}>
-                Vencimiento
-              </p>
-
-              <p
-                style={{
-                  margin: "10px 0 0",
-                  fontSize: 22,
-                  fontWeight: 800,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
+            <div style={membershipCard}>
+              <div
+                style={
+                  membershipHeader
+                }
               >
-                <Calendar size={20} />
-                {formatDate(currentFee?.due_date)}
-              </p>
-            </div>
+                <CreditCard
+                  size={20}
+                />
 
-            <div
-              style={{
-                background: "#FBF9F6",
-                border: "1px solid #E5E1DA",
-                borderRadius: 22,
-                padding: 18,
-              }}
-            >
-              <p style={{ margin: 0, color: "#6B7280", fontSize: 13 }}>
-                Importe informado
-              </p>
+                QR privado
+              </div>
 
-              <p style={{ margin: "10px 0 0", fontSize: 22, fontWeight: 800 }}>
-                {currentFee?.amount ? `$${currentFee.amount} UYU` : "Sin importe"}
+              <div style={qrBox}>
+                QR próximamente
+              </div>
+
+              <p style={qrText}>
+                Este código permitirá
+                validar retiros y acceso
+                rápido en el club.
               </p>
             </div>
           </div>
-
-          {(currentFee?.status === "pendiente" ||
-            currentFee?.status === "vencida") && (
-            <a
-              href={`/api/create-preference?clubId=${membership.club_id}&type=member_fee`}
-              style={{
-                display: "block",
-                marginTop: 22,
-                width: "100%",
-                background: "#76A889",
-                color: "white",
-                textAlign: "center",
-                textDecoration: "none",
-                borderRadius: 18,
-                padding: 15,
-                fontWeight: 800,
-                boxSizing: "border-box",
-              }}
-            >
-              Pagar cuota social
-            </a>
-          )}
         </section>
-
-        <section
-          style={{
-            background: "white",
-            border: "1px solid #E5E1DA",
-            borderRadius: 32,
-            padding: 30,
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>
-            Historial de cuotas
-          </h2>
-
-          {fees.length === 0 ? (
-            <p style={{ marginTop: 14, color: "#6B7280" }}>
-              Todavía no hay registros de cuota social.
-            </p>
-          ) : (
-            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-              {fees.map((fee) => {
-                const feeStatus = getStatus(fee.status);
-
-                return (
-                  <div
-                    key={fee.id}
-                    style={{
-                      border: "1px solid #E5E1DA",
-                      borderRadius: 18,
-                      padding: 16,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <div>
-                      <p style={{ margin: 0, fontWeight: 800 }}>
-                        Cuota social
-                      </p>
-                      <p
-                        style={{
-                          margin: "4px 0 0",
-                          fontSize: 13,
-                          color: "#6B7280",
-                        }}
-                      >
-                        Vencimiento: {formatDate(fee.due_date)}
-                      </p>
-                    </div>
-
-                    <div style={{ textAlign: "right" }}>
-                      <p style={{ margin: 0, fontWeight: 800 }}>
-                        {fee.amount ? `$${fee.amount} UYU` : "Sin importe"}
-                      </p>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          marginTop: 6,
-                          background: feeStatus.bg,
-                          color: feeStatus.color,
-                          borderRadius: 999,
-                          padding: "6px 10px",
-                          fontSize: 12,
-                          fontWeight: 800,
-                        }}
-                      >
-                        {feeStatus.label}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
+      </main>
     </SocioShell>
   );
 }
+
+const page: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 1280,
+  margin: "0 auto",
+};
+
+const header: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 28,
+};
+
+const heroIcon: React.CSSProperties = {
+  width: 64,
+  height: 64,
+  borderRadius: 22,
+  background:
+    "linear-gradient(135deg, rgba(139,224,0,0.22), rgba(139,224,0,0.08))",
+  border:
+    "1px solid rgba(139,224,0,0.18)",
+  color: "#8BE000",
+  display: "grid",
+  placeItems: "center",
+};
+
+const title: React.CSSProperties = {
+  margin: 0,
+  color: "#FFFFFF",
+  fontSize: 42,
+  fontWeight: 950,
+};
+
+const subtitle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#9B9B9B",
+};
+
+const grid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns:
+    "1.3fr 0.7fr",
+  gap: 22,
+};
+
+const leftColumn: React.CSSProperties =
+  {
+    display: "grid",
+  };
+
+const rightColumn: React.CSSProperties =
+  {
+    display: "grid",
+    gap: 20,
+    alignContent: "start",
+  };
+
+const profileCard: React.CSSProperties =
+  {
+    background: "#101010",
+    border:
+      "1px solid rgba(255,255,255,0.06)",
+    borderRadius: 30,
+    padding: 26,
+  };
+
+const avatarSection: React.CSSProperties =
+  {
+    display: "flex",
+    alignItems: "center",
+    gap: 20,
+    marginBottom: 30,
+  };
+
+const avatar: React.CSSProperties = {
+  width: 110,
+  height: 110,
+  borderRadius: 999,
+  background:
+    "linear-gradient(135deg, #8BE000, #5EA000)",
+  color: "#050505",
+  fontWeight: 950,
+  fontSize: 34,
+  display: "grid",
+  placeItems: "center",
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+};
+
+const uploadButton: React.CSSProperties =
+  {
+    height: 46,
+    borderRadius: 16,
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    background: "#0B0B0B",
+    color: "#FFFFFF",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "0 18px",
+    cursor: "pointer",
+    fontWeight: 700,
+  };
+
+const form: React.CSSProperties = {
+  display: "grid",
+  gap: 18,
+};
+
+const field: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const label: React.CSSProperties = {
+  color: "#B8B8B8",
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+const inputWrapper: React.CSSProperties =
+  {
+    height: 56,
+    borderRadius: 18,
+    background: "#0B0B0B",
+    border:
+      "1px solid rgba(255,255,255,0.08)",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "0 18px",
+    color: "#8BE000",
+  };
+
+const disabledInput: React.CSSProperties =
+  {
+    ...inputWrapper,
+    color: "#FFFFFF",
+  };
+
+const input: React.CSSProperties = {
+  flex: 1,
+  background: "transparent",
+  border: "none",
+  outline: "none",
+  color: "#FFFFFF",
+  fontSize: 15,
+};
+
+const saveButton: React.CSSProperties =
+  {
+    marginTop: 10,
+    height: 56,
+    borderRadius: 18,
+    border: "none",
+    background: "#8BE000",
+    color: "#050505",
+    fontWeight: 950,
+    fontSize: 15,
+    cursor: "pointer",
+  };
+
+const membershipCard: React.CSSProperties =
+  {
+    background: "#101010",
+    border:
+      "1px solid rgba(255,255,255,0.06)",
+    borderRadius: 28,
+    padding: 24,
+  };
+
+const membershipHeader: React.CSSProperties =
+  {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    color: "#FFFFFF",
+    fontWeight: 900,
+    marginBottom: 22,
+  };
+
+const infoRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  marginBottom: 18,
+};
+
+const infoLabel: React.CSSProperties =
+  {
+    color: "#8B8B8B",
+  };
+
+const infoValue: React.CSSProperties =
+  {
+    color: "#FFFFFF",
+    fontWeight: 800,
+  };
+
+const activeBadge: React.CSSProperties =
+  {
+    background:
+      "rgba(139,224,0,0.12)",
+    color: "#8BE000",
+    borderRadius: 999,
+    padding: "8px 14px",
+    fontWeight: 900,
+    fontSize: 12,
+  };
+
+const qrBox: React.CSSProperties = {
+  height: 220,
+  borderRadius: 24,
+  background:
+    "linear-gradient(135deg, rgba(139,224,0,0.18), rgba(139,224,0,0.05))",
+  border:
+    "1px solid rgba(139,224,0,0.18)",
+  display: "grid",
+  placeItems: "center",
+  color: "#8BE000",
+  fontWeight: 950,
+  fontSize: 24,
+};
+
+const qrText: React.CSSProperties = {
+  margin: "16px 0 0",
+  color: "#8B8B8B",
+  lineHeight: 1.5,
+};
+
+const loadingBox: React.CSSProperties =
+  {
+    background: "#101010",
+    borderRadius: 22,
+    padding: 24,
+    color: "#FFFFFF",
+  };

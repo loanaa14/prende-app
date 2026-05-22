@@ -1,87 +1,82 @@
-Reemplazá COMPLETO `src/app/socio/page.tsx` por esto:
-
-```tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import SocioShell from "@/components/socio/SocioShell";
 import { createClient } from "@/lib/supabase/client";
 import {
-  CreditCard,
-  Calendar,
   CheckCircle2,
-  AlertCircle,
-  User,
-  LogOut,
-  Lock,
-  Bell,
+  CreditCard,
+  Package,
+  Flame,
+  CalendarDays,
 } from "lucide-react";
 
-export default function SocioHomePage() {
+export default function SocioPage() {
   const supabase = createClient();
-  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
-
-  const [user, setUser] = useState<any>(null);
-  const [membership, setMembership] = useState<any>(null);
-  const [club, setClub] = useState<any>(null);
-  const [payments, setPayments] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
 
   async function loadData() {
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    const currentUser = session?.user;
-
-    if (!currentUser) {
-      router.push("/login");
-      return;
-    }
-
-    setUser(currentUser);
-
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", currentUser.id)
-      .maybeSingle();
-
-    setProfile(profileData);
-
-    const { data: membershipData } = await supabase
-      .from("memberships")
-      .select("*")
-      .eq("user_id", currentUser.id)
-      .eq("status", "active")
-      .maybeSingle();
-
-    setMembership(membershipData);
-
-    if (!membershipData?.club_id) {
+    if (!user) {
       setLoading(false);
       return;
     }
 
-    const { data: clubData } = await supabase
-      .from("clubs")
+    const { data: profileData } = await supabase
+      .from("profiles")
       .select("*")
-      .eq("id", membershipData.club_id)
+      .eq("id", user.id)
       .maybeSingle();
 
-    setClub(clubData);
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("club_id")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
 
-    const { data: paymentData } = await supabase
-      .from("member_payments")
-      .select("*")
-      .eq("club_id", membershipData.club_id)
-      .eq("user_id", currentUser.id)
-      .order("created_at", { ascending: false });
+    if (!membership?.club_id) {
+      setProfile(profileData);
+      setLoading(false);
+      return;
+    }
 
-    setPayments(paymentData || []);
+    const [paymentsRes, withdrawalsRes, eventsRes] = await Promise.all([
+      supabase
+        .from("member_payments")
+        .select("*")
+        .eq("club_id", membership.club_id)
+        .eq("user_id", user.id)
+        .order("due_date", { ascending: false }),
 
+      supabase
+        .from("withdrawals")
+        .select("*")
+        .eq("club_id", membership.club_id)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(3),
+
+      supabase
+        .from("club_events")
+        .select("*")
+        .eq("club_id", membership.club_id)
+        .order("start_date", { ascending: true })
+        .limit(3),
+    ]);
+
+    setProfile(profileData);
+    setPayments(paymentsRes.data || []);
+    setWithdrawals(withdrawalsRes.data || []);
+    setEvents(eventsRes.data || []);
     setLoading(false);
   }
 
@@ -89,339 +84,151 @@ export default function SocioHomePage() {
     loadData();
   }, []);
 
-  async function logout() {
-    await supabase.auth.signOut();
-    router.push("/login");
-  }
-
-  function formatDate(date?: string) {
-    if (!date) return "-";
-
-    return new Date(date + "T00:00:00").toLocaleDateString("es-UY", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }
-
+  const pendingPayments = payments.filter((p) => p.status === "pending");
   const paidPayments = payments.filter((p) => p.status === "paid");
 
-  const pendingPayments = payments.filter(
-    (p) => p.status === "pending"
-  );
-
-  const nextPayment = pendingPayments[0];
-
-  const overduePayments = pendingPayments.filter(
-    (p) => p.due_date < new Date().toISOString().slice(0, 10)
+  const totalWithdrawn = withdrawals.reduce(
+    (acc, item) => acc + Number(item.quantity || item.amount || 0),
+    0
   );
 
   if (loading) {
     return (
-      <main style={loadingPage}>
-        <div style={loadingCard}>Cargando espacio privado...</div>
-      </main>
-    );
-  }
-
-  if (!membership?.club_id) {
-    return (
-      <main style={loadingPage}>
-        <div style={loadingCard}>
-          No perteneces a ningún club activo.
-        </div>
-      </main>
+      <SocioShell>
+        <div style={loadingBox}>Cargando tu panel...</div>
+      </SocioShell>
     );
   }
 
   return (
-    <main style={page}>
-      <aside style={sidebar}>
-        <div>
-          <div style={brand}>Prendé</div>
-
-          <div style={profileCard}>
-            <div style={avatar}>
-              {(profile?.full_name || user?.email || "S")
-                .slice(0, 1)
-                .toUpperCase()}
-            </div>
-
-            <div>
-              <p style={profileName}>
-                {profile?.full_name || "Socio"}
-              </p>
-
-              <p style={profileEmail}>{user?.email}</p>
-            </div>
-          </div>
-
-          <nav style={nav}>
-            <div style={navActive}>
-              <CreditCard size={16} />
-              Mi espacio
-            </div>
-
-            <div style={navItem}>
-              <Bell size={16} />
-              Comunidad
-            </div>
-
-            <div
-              style={navItem}
-              onClick={() => router.push("/change-password")}
-            >
-              <Lock size={16} />
-              Cambiar contraseña
-            </div>
-          </nav>
-        </div>
-
-        <button onClick={logout} style={logoutButton}>
-          <LogOut size={16} />
-          Cerrar sesión
-        </button>
-      </aside>
-
-      <section style={content}>
+    <SocioShell>
+      <main style={page}>
         <header style={header}>
           <div>
-            <h1 style={title}>Hola 👋</h1>
-
-            <p style={subtitle}>
-              Bienvenido al espacio privado de {club?.name || "tu club"}.
-            </p>
+            <h1 style={title}>Hola, {profile?.full_name || "socio"} 👋</h1>
+            <p style={subtitle}>Bienvenido a tu espacio privado.</p>
           </div>
         </header>
 
-        <section style={kpiGrid}>
-          <div style={kpiCard}>
-            <div style={kpiIcon}>
-              <CheckCircle2 size={22} />
-            </div>
+        <section style={grid}>
+          <div style={mainCard}>
+            <p style={eyebrow}>Estado de cuota</p>
 
-            <div>
-              <p style={kpiLabel}>Pagadas</p>
-              <p style={kpiValue}>{paidPayments.length}</p>
-            </div>
-          </div>
+            <div style={statusRow}>
+              <div>
+                <h2 style={mainTitle}>
+                  {pendingPayments.length ? "Tenés cuotas pendientes" : "Estás al día"}
+                </h2>
 
-          <div style={kpiCard}>
-            <div style={kpiIcon}>
-              <AlertCircle size={22} />
-            </div>
-
-            <div>
-              <p style={kpiLabel}>Pendientes</p>
-              <p style={kpiValue}>{pendingPayments.length}</p>
-            </div>
-          </div>
-
-          <div style={kpiCard}>
-            <div style={kpiIcon}>
-              <Calendar size={22} />
-            </div>
-
-            <div>
-              <p style={kpiLabel}>Próximo vencimiento</p>
-              <p style={kpiSmallValue}>
-                {nextPayment
-                  ? formatDate(nextPayment.due_date)
-                  : "Sin cuotas"}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {overduePayments.length > 0 && (
-          <div style={warningBox}>
-            Tenés cuotas vencidas pendientes.
-          </div>
-        )}
-
-        <section style={mainCard}>
-          <div style={cardHeader}>
-            <h2 style={cardTitle}>Historial de cuotas</h2>
-          </div>
-
-          <div style={paymentList}>
-            {payments.map((payment) => {
-              const isPaid = payment.status === "paid";
-
-              const isOverdue =
-                payment.status === "pending" &&
-                payment.due_date <
-                  new Date().toISOString().slice(0, 10);
-
-              return (
-                <div key={payment.id} style={paymentRow}>
-                  <div>
-                    <p style={paymentConcept}>
-                      {payment.concept}
-                    </p>
-
-                    <p style={paymentDate}>
-                      Vence {formatDate(payment.due_date)}
-                    </p>
-                  </div>
-
-                  <div style={paymentRight}>
-                    <p style={paymentAmount}>
-                      ${Number(payment.amount).toLocaleString("es-UY")}
-                    </p>
-
-                    <span
-                      style={
-                        isPaid
-                          ? paidBadge
-                          : isOverdue
-                          ? overdueBadge
-                          : pendingBadge
-                      }
-                    >
-                      {isPaid
-                        ? "Pagada"
-                        : isOverdue
-                        ? "Vencida"
-                        : "Pendiente"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-
-            {!payments.length && (
-              <div style={emptyBox}>
-                Todavía no hay cuotas registradas.
+                <p style={mainText}>
+                  {pendingPayments.length
+                    ? `Tenés ${pendingPayments.length} cuota(s) pendiente(s).`
+                    : "No tenés cuotas pendientes registradas en este momento."}
+                </p>
               </div>
-            )}
+
+              <div style={bigIcon}>
+                <CheckCircle2 size={30} />
+              </div>
+            </div>
+          </div>
+
+          <div style={sideStats}>
+            <Stat
+              icon={<Package size={18} />}
+              title="Total retirado"
+              value={`${totalWithdrawn}g`}
+            />
+
+            <Stat
+              icon={<Flame size={18} />}
+              title="Genética más retirada"
+              value="Sin datos"
+            />
+
+            <Stat
+              icon={<CreditCard size={18} />}
+              title="Cuotas pagadas"
+              value={paidPayments.length}
+            />
           </div>
         </section>
-      </section>
-    </main>
+
+        <section style={bottomGrid}>
+          <div style={panelCard}>
+            <div style={panelHeader}>
+              <h2 style={panelTitle}>Últimos retiros</h2>
+            </div>
+
+            <div style={list}>
+              {withdrawals.map((item) => (
+                <div key={item.id} style={row}>
+                  <span>{item.genetic || item.product_name || "Retiro"}</span>
+                  <strong>{item.quantity || item.amount || 0}g</strong>
+                </div>
+              ))}
+
+              {!withdrawals.length && (
+                <div style={empty}>Todavía no hay retiros registrados.</div>
+              )}
+            </div>
+          </div>
+
+          <div style={panelCard}>
+            <div style={panelHeader}>
+              <h2 style={panelTitle}>Próximos eventos</h2>
+            </div>
+
+            <div style={list}>
+              {events.map((event) => (
+                <div key={event.id} style={row}>
+                  <span>{event.title}</span>
+                  <strong>{formatDate(event.start_date)}</strong>
+                </div>
+              ))}
+
+              {!events.length && (
+                <div style={empty}>No hay eventos publicados.</div>
+              )}
+            </div>
+          </div>
+        </section>
+      </main>
+    </SocioShell>
   );
 }
 
+function Stat({ icon, title, value }: any) {
+  return (
+    <div style={statCard}>
+      <div style={statIcon}>{icon}</div>
+      <div>
+        <p style={statTitle}>{title}</p>
+        <h3 style={statValue}>{value}</h3>
+      </div>
+    </div>
+  );
+}
+
+function formatDate(date: string) {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString("es-UY");
+}
+
 const page: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "#050505",
-  color: "#FFFFFF",
-  display: "grid",
-  gridTemplateColumns: "240px 1fr",
-};
-
-const loadingPage: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "#050505",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const loadingCard: React.CSSProperties = {
-  backgroundColor: "#101010",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 24,
-  padding: 24,
-  color: "#FFFFFF",
-};
-
-const sidebar: React.CSSProperties = {
-  backgroundColor: "#070707",
-  borderRight: "1px solid rgba(255,255,255,0.08)",
-  padding: 24,
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "space-between",
-};
-
-const brand: React.CSSProperties = {
-  fontSize: 24,
-  fontWeight: 950,
-  marginBottom: 28,
-};
-
-const profileCard: React.CSSProperties = {
-  backgroundColor: "#101010",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 22,
-  padding: 16,
-  display: "flex",
-  gap: 12,
-  alignItems: "center",
-  marginBottom: 24,
-};
-
-const avatar: React.CSSProperties = {
-  width: 44,
-  height: 44,
-  borderRadius: 999,
-  backgroundColor: "rgba(139,224,0,0.12)",
-  display: "grid",
-  placeItems: "center",
-  color: "#8BE000",
-  fontWeight: 950,
-};
-
-const profileName: React.CSSProperties = {
-  margin: 0,
-  fontWeight: 900,
-};
-
-const profileEmail: React.CSSProperties = {
-  margin: "4px 0 0",
-  color: "#8B8B8B",
-  fontSize: 12,
-};
-
-const nav: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const navItem: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  padding: "12px 14px",
-  borderRadius: 14,
-  color: "#B8B8B8",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const navActive: React.CSSProperties = {
-  ...navItem,
-  backgroundColor: "rgba(139,224,0,0.12)",
-  color: "#8BE000",
-};
-
-const logoutButton: React.CSSProperties = {
-  backgroundColor: "#151515",
-  border: "1px solid rgba(255,255,255,0.08)",
-  color: "#FFFFFF",
-  borderRadius: 14,
-  padding: "12px 14px",
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  cursor: "pointer",
-  fontWeight: 900,
-};
-
-const content: React.CSSProperties = {
-  padding: 28,
-  background:
-    "radial-gradient(circle at top right, rgba(139,224,0,0.12), transparent 30%), #050505",
+  width: "100%",
+  maxWidth: 1250,
+  margin: "0 auto",
 };
 
 const header: React.CSSProperties = {
-  marginBottom: 24,
+  marginBottom: 28,
 };
 
 const title: React.CSSProperties = {
   margin: 0,
-  fontSize: 36,
+  color: "#FFFFFF",
+  fontSize: 42,
   fontWeight: 950,
 };
 
@@ -430,150 +237,146 @@ const subtitle: React.CSSProperties = {
   color: "#9B9B9B",
 };
 
-const kpiGrid: React.CSSProperties = {
+const grid: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: 16,
-  marginBottom: 18,
+  gridTemplateColumns: "1.7fr 0.9fr",
+  gap: 20,
 };
 
-const kpiCard: React.CSSProperties = {
-  backgroundColor: "#101010",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 24,
-  padding: 20,
+const mainCard: React.CSSProperties = {
+  background: "#101010",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 30,
+  padding: 26,
+  minHeight: 230,
+};
+
+const eyebrow: React.CSSProperties = {
+  margin: 0,
+  color: "#8BE000",
+  fontWeight: 900,
+  fontSize: 13,
+};
+
+const statusRow: React.CSSProperties = {
   display: "flex",
-  gap: 14,
+  justifyContent: "space-between",
+  gap: 20,
   alignItems: "center",
+  marginTop: 18,
 };
 
-const kpiIcon: React.CSSProperties = {
-  width: 48,
-  height: 48,
-  borderRadius: 16,
-  backgroundColor: "rgba(139,224,0,0.12)",
+const mainTitle: React.CSSProperties = {
+  margin: 0,
+  color: "#FFFFFF",
+  fontSize: 34,
+  fontWeight: 950,
+};
+
+const mainText: React.CSSProperties = {
+  margin: "16px 0 0",
+  color: "#B8B8B8",
+};
+
+const bigIcon: React.CSSProperties = {
+  width: 68,
+  height: 68,
+  borderRadius: 22,
+  background: "rgba(139,224,0,0.12)",
   color: "#8BE000",
   display: "grid",
   placeItems: "center",
 };
 
-const kpiLabel: React.CSSProperties = {
+const sideStats: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+};
+
+const statCard: React.CSSProperties = {
+  background: "#101010",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 24,
+  padding: 18,
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+};
+
+const statIcon: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 16,
+  background: "rgba(139,224,0,0.12)",
+  color: "#8BE000",
+  display: "grid",
+  placeItems: "center",
+};
+
+const statTitle: React.CSSProperties = {
   margin: 0,
   color: "#9B9B9B",
   fontSize: 13,
 };
 
-const kpiValue: React.CSSProperties = {
+const statValue: React.CSSProperties = {
   margin: "6px 0 0",
-  fontSize: 28,
+  color: "#FFFFFF",
+  fontSize: 20,
   fontWeight: 950,
 };
 
-const kpiSmallValue: React.CSSProperties = {
-  margin: "6px 0 0",
-  fontSize: 18,
+const bottomGrid: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 20,
+  marginTop: 20,
+};
+
+const panelCard: React.CSSProperties = {
+  background: "#101010",
+  border: "1px solid rgba(255,255,255,0.06)",
+  borderRadius: 28,
+  padding: 22,
+};
+
+const panelHeader: React.CSSProperties = {
+  marginBottom: 16,
+};
+
+const panelTitle: React.CSSProperties = {
+  margin: 0,
+  color: "#FFFFFF",
+  fontSize: 24,
   fontWeight: 950,
 };
 
-const warningBox: React.CSSProperties = {
-  backgroundColor: "rgba(255,107,107,0.10)",
-  border: "1px solid rgba(255,107,107,0.22)",
-  color: "#FF6B6B",
+const list: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const row: React.CSSProperties = {
+  background: "#0A0A0A",
   borderRadius: 16,
   padding: 14,
-  marginBottom: 18,
-  fontWeight: 900,
-};
-
-const mainCard: React.CSSProperties = {
-  backgroundColor: "#101010",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 28,
-  padding: 24,
-};
-
-const cardHeader: React.CSSProperties = {
-  marginBottom: 18,
-};
-
-const cardTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 22,
-  fontWeight: 950,
-};
-
-const paymentList: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-};
-
-const paymentRow: React.CSSProperties = {
-  backgroundColor: "#0B0B0B",
-  border: "1px solid rgba(255,255,255,0.06)",
-  borderRadius: 18,
-  padding: 16,
-  display: "grid",
-  gridTemplateColumns: "1fr auto",
-  gap: 16,
-  alignItems: "center",
-};
-
-const paymentConcept: React.CSSProperties = {
-  margin: 0,
-  fontWeight: 900,
-};
-
-const paymentDate: React.CSSProperties = {
-  margin: "6px 0 0",
-  color: "#8B8B8B",
-  fontSize: 13,
-};
-
-const paymentRight: React.CSSProperties = {
+  color: "#FFFFFF",
   display: "flex",
-  alignItems: "center",
+  justifyContent: "space-between",
   gap: 12,
 };
 
-const paymentAmount: React.CSSProperties = {
-  margin: 0,
-  fontWeight: 950,
-};
-
-const paidBadge: React.CSSProperties = {
-  backgroundColor: "rgba(139,224,0,0.12)",
-  color: "#8BE000",
-  border: "1px solid rgba(139,224,0,0.22)",
-  borderRadius: 999,
-  padding: "7px 10px",
-  fontWeight: 900,
-  fontSize: 12,
-};
-
-const pendingBadge: React.CSSProperties = {
-  backgroundColor: "rgba(255,255,255,0.06)",
-  color: "#D8D8D8",
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 999,
-  padding: "7px 10px",
-  fontWeight: 900,
-  fontSize: 12,
-};
-
-const overdueBadge: React.CSSProperties = {
-  backgroundColor: "rgba(255,107,107,0.10)",
-  color: "#FF6B6B",
-  border: "1px solid rgba(255,107,107,0.22)",
-  borderRadius: 999,
-  padding: "7px 10px",
-  fontWeight: 900,
-  fontSize: 12,
-};
-
-const emptyBox: React.CSSProperties = {
-  backgroundColor: "#0B0B0B",
-  borderRadius: 18,
-  padding: 24,
-  textAlign: "center",
+const empty: React.CSSProperties = {
+  background: "#0A0A0A",
+  borderRadius: 16,
+  padding: 18,
   color: "#8B8B8B",
+  textAlign: "center",
+};
+
+const loadingBox: React.CSSProperties = {
+  background: "#101010",
+  borderRadius: 22,
+  padding: 24,
+  color: "#FFFFFF",
 };

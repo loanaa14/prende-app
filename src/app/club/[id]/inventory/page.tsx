@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getClubTheme } from "@/lib/supabase/getClubTheme";
+import LogoutButton from "@/components/LogoutButton";
 import {
   BarChart3,
   Boxes,
@@ -17,6 +18,7 @@ import {
   Sprout,
   Users,
   Wrench,
+  BookOpen,
 } from "lucide-react";
 
 const categories = [
@@ -124,8 +126,10 @@ export default async function InventoryPage({ params, searchParams }: any) {
             <Nav href={`/club/${id}/members`} icon={<Users size={16} />} text="Socios" />
             <Nav href={`/club/${id}/payments`} icon={<CreditCard size={16} />} text="Pagos" />
             <Nav href={`/club/${id}/inventory`} icon={<Boxes size={16} />} text="Inventario" active />
+             <Nav href={`/club/${id}/withdrawals`}icon={<Boxes size={16} />}text="Retiros"/>
             <Nav href={`/club/${id}/community`} icon={<MessageCircle size={16} />} text="Comunidad" />
             <Nav href={`/club/${id}/payments`} icon={<BarChart3 size={16} />} text="Reportes" />
+            <Nav href={`/club/${id}/library`} icon={<BookOpen size={17} />} text="Biblioteca"/>
             <Nav href={`/club/${id}/settings`} icon={<Settings size={16} />} text="Ajustes" />
           </nav>
         </div>
@@ -137,6 +141,7 @@ export default async function InventoryPage({ params, searchParams }: any) {
             <p style={clubMiniTitle}>{clubName}</p>
             <p style={clubMiniText}>Administrador</p>
           </div>
+          <LogoutButton />
         </div>
       </aside>
 

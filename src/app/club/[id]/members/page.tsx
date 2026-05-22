@@ -62,6 +62,7 @@ export default async function MembersPage({ params }: any) {
             <Nav href={`/club/${id}/members`} icon={<Users size={17} />} text="Socios" active />
             <Nav href={`/club/${id}/payments`} icon={<CreditCard size={17} />} text="Pagos" />
             <Nav href={`/club/${id}/inventory`} icon={<Boxes size={17} />} text="Inventario" />
+            <Nav href={`/club/${id}/withdrawals`}icon={<Boxes size={16} />}text="Retiros"/>
             <Nav href={`/club/${id}/community`} icon={<MessageCircle size={17} />} text="Comunidad" />
             <Nav href={`/club/${id}/payments`} icon={<BarChart3 size={17} />} text="Reportes" />
             <Nav href={`/club/${id}/settings`} icon={<Settings size={17} />} text="Ajustes" />

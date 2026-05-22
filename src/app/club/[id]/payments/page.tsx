@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getClubTheme } from "@/lib/supabase/getClubTheme";
+import LogoutButton from "@/components/LogoutButton";
 import {
   BarChart3,
   Boxes,
@@ -16,6 +17,7 @@ import {
   AlertCircle,
   CalendarDays,
   DollarSign,
+  BookOpen,
 } from "lucide-react";
 
 export default async function PaymentsPage({ params, searchParams }: any) {
@@ -51,7 +53,13 @@ export default async function PaymentsPage({ params, searchParams }: any) {
       console.error("CREATE PAYMENT ERROR:", error);
       redirect(`/club/${id}/payments?error=create_payment`);
     }
-
+await supabase.from("notifications").insert({
+  club_id: id,
+  user_id: userId,
+  title: "Nueva cuota registrada",
+  message: `Se registró una cuota de $${amount}.`,
+  type: "payment",
+});
     revalidatePath(`/club/${id}/payments`);
     redirect(`/club/${id}/payments?success=payment_created`);
   }
@@ -187,8 +195,10 @@ export default async function PaymentsPage({ params, searchParams }: any) {
             <Nav href={`/club/${id}/members`} icon={<Users size={16} />} text="Socios" />
             <Nav href={`/club/${id}/payments`} icon={<CreditCard size={16} />} text="Pagos" active />
             <Nav href={`/club/${id}/inventory`} icon={<Boxes size={16} />} text="Inventario" />
+             <Nav href={`/club/${id}/withdrawals`}icon={<Boxes size={16} />}text="Retiros"/>
             <Nav href={`/club/${id}/community`} icon={<MessageCircle size={16} />} text="Comunidad" />
             <Nav href={`/club/${id}/payments`} icon={<BarChart3 size={16} />} text="Reportes" />
+            <Nav href={`/club/${id}/library`}icon={<BookOpen size={17} />}text="Biblioteca"/>
             <Nav href={`/club/${id}/settings`} icon={<Settings size={16} />} text="Ajustes" />
           </nav>
         </div>
@@ -200,6 +210,7 @@ export default async function PaymentsPage({ params, searchParams }: any) {
             <p style={clubMiniTitle}>{clubName}</p>
             <p style={clubMiniText}>Administrador</p>
           </div>
+          <LogoutButton />
         </div>
       </aside>
 

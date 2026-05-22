@@ -21,7 +21,7 @@ export default function LoginPage() {
     setErrorMessage("");
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim().toLowerCase(),
       password,
     });
 
@@ -31,18 +31,28 @@ export default function LoginPage() {
       return;
     }
 
-    const { data: membership } = await supabase
+    const { data: membership, error: membershipError } = await supabase
       .from("memberships")
-      .select("club_id")
+      .select("club_id, role, status")
       .eq("user_id", data.user.id)
+      .eq("status", "active")
+      .limit(1)
       .maybeSingle();
 
-    if (membership?.club_id) {
-      router.push(`/club/${membership.club_id}`);
+    if (membershipError || !membership) {
+      setErrorMessage("Tu usuario no tiene un club activo asignado.");
+      setLoading(false);
       return;
     }
 
-    router.push("/dashboard");
+    if (membership.role === "admin") {
+      router.push(`/club/${membership.club_id}`);
+      router.refresh();
+      return;
+    }
+
+    router.push("/socio");
+    router.refresh();
   };
 
   return (
@@ -52,9 +62,7 @@ export default function LoginPage() {
 
         <h1 style={title}>Ingresar</h1>
 
-        <p style={subtitle}>
-          Acceso privado para clubes y socios.
-        </p>
+        <p style={subtitle}>Acceso privado para clubes y socios.</p>
 
         <form onSubmit={handleLogin} style={form}>
           <input
@@ -75,18 +83,12 @@ export default function LoginPage() {
             placeholder="Contraseña"
           />
 
-          {errorMessage && (
-            <div style={errorBox}>{errorMessage}</div>
-          )}
+          {errorMessage && <div style={errorBox}>{errorMessage}</div>}
 
           <button disabled={loading} style={button}>
             {loading ? "Ingresando..." : "Entrar"}
           </button>
         </form>
-
-        <a href="/signup" style={link}>
-          Crear cuenta
-        </a>
       </section>
     </main>
   );
@@ -162,13 +164,4 @@ const errorBox: React.CSSProperties = {
   color: "#FF6B6B",
   borderRadius: 14,
   padding: 12,
-};
-
-const link: React.CSSProperties = {
-  display: "block",
-  marginTop: 18,
-  color: "#8BE000",
-  textAlign: "center",
-  textDecoration: "none",
-  fontWeight: 800,
 };

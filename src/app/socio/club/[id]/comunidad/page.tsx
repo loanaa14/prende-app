@@ -3,506 +3,611 @@
 import { use, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import SocioShell from "@/components/socio/SocioShell";
-import { Heart, MessageCircle, Send, Users } from "lucide-react";
 
-export default function ComunidadPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+import {
+  Heart,
+  MessageCircle,
+  Send,
+} from "lucide-react";
+
+export default function ComunidadSocioPage({ params }: any) {
   const { id: clubId } = use(params);
+
   const supabase = createClient();
 
-  const [user, setUser] = useState<any>(null);
   const [club, setClub] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
-  const [content, setContent] = useState("");
+  const [comments, setComments] = useState<any[]>([]);
+  const [reactions, setReactions] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState("");
 
-  function formatDate(date: string) {
-    return new Date(date).toLocaleString("es-UY", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  function getDisplayName(profile: any, fallback?: string) {
-    return profile?.username || fallback || "socio";
-  }
-
-  function getInitial(name: string) {
-    return String(name || "S").charAt(0).toUpperCase();
-  }
-
-  function Avatar({ profile, fallback }: { profile: any; fallback?: string }) {
-    const name = getDisplayName(profile, fallback);
-
-    return (
-      <div
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          background: "#12372A",
-          color: "white",
-          display: "grid",
-          placeItems: "center",
-          fontWeight: 800,
-          overflow: "hidden",
-          flexShrink: 0,
-        }}
-      >
-        {profile?.avatar_url ? (
-          <img
-            src={profile.avatar_url}
-            alt={name}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-            }}
-          />
-        ) : (
-          getInitial(name)
-        )}
-      </div>
-    );
-  }
+  const [activeImageIndexes, setActiveImageIndexes] = useState<any>({});
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
   async function loadData() {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const currentUser = sessionData.session?.user;
-    setUser(currentUser ?? null);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    const { data: clubData } = await supabase
-      .from("clubs")
-      .select("*")
-      .eq("id", clubId)
-      .maybeSingle();
+    if (user?.id) setCurrentUserId(user.id);
 
-    setClub(clubData);
-
-    const { data: postsData } = await supabase
-      .from("community_posts")
-      .select("*")
-      .eq("club_id", clubId)
-      .order("created_at", { ascending: false });
-
-    const postIds = postsData?.map((p) => p.id) ?? [];
-    const postUserIds = postsData?.map((p) => p.user_id) ?? [];
-
-    const { data: likesData } = postIds.length
-      ? await supabase
-          .from("community_post_likes")
+    const [clubRes, postsRes, commentsRes, reactionsRes] =
+      await Promise.all([
+        supabase
+          .from("clubs")
           .select("*")
-          .in("post_id", postIds)
-      : { data: [] };
+          .eq("id", clubId)
+          .maybeSingle(),
 
-    const { data: commentsData } = postIds.length
-      ? await supabase
-          .from("community_comments")
+        supabase
+          .from("club_posts")
           .select("*")
-          .in("post_id", postIds)
-          .order("created_at", { ascending: true })
-      : { data: [] };
+          .eq("club_id", clubId)
+          .order("is_pinned", { ascending: false })
+          .order("created_at", { ascending: false }),
 
-    const commentUserIds = commentsData?.map((c) => c.user_id) ?? [];
-    const allUserIds = Array.from(new Set([...postUserIds, ...commentUserIds]));
+        supabase
+          .from("club_post_comments")
+          .select(
+            `
+            *,
+            profiles (
+              full_name,
+              email,
+              avatar_url
+            )
+          `
+          )
+          .order("created_at", { ascending: true }),
 
-    const { data: profilesData } = allUserIds.length
-      ? await supabase
-          .from("profiles")
-          .select("id, username, avatar_url")
-          .in("id", allUserIds)
-      : { data: [] };
+        supabase
+          .from("club_post_reactions")
+          .select("*"),
+      ]);
 
-    const merged =
-      postsData?.map((post) => ({
-        ...post,
-        profile: profilesData?.find((p) => p.id === post.user_id),
-        likes: likesData?.filter((l) => l.post_id === post.id) ?? [],
-        comments:
-          commentsData
-            ?.filter((c) => c.post_id === post.id)
-            .map((c) => ({
-              ...c,
-              profile: profilesData?.find((p) => p.id === c.user_id),
-            })) ?? [],
-      })) ?? [];
+    setClub(clubRes.data);
+    setPosts(postsRes.data || []);
+    setComments(commentsRes.data || []);
+    setReactions(reactionsRes.data || []);
 
-    setPosts(merged);
     setLoading(false);
   }
 
   useEffect(() => {
     loadData();
-  }, [clubId]);
+  }, []);
 
-  async function createPost(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function toggleLike(postId: string) {
+    if (!currentUserId) return;
 
-    if (!user || !content.trim()) return;
+    const existing = reactions.find(
+      (reaction) =>
+        reaction.post_id === postId &&
+        reaction.user_id === currentUserId &&
+        reaction.reaction === "like"
+    );
 
-    await supabase.from("community_posts").insert({
-      club_id: clubId,
-      user_id: user.id,
-      content: content.trim(),
-    });
-
-    setContent("");
-    await loadData();
-  }
-
-  async function toggleLike(post: any) {
-    if (!user) return;
-
-    const existingLike = post.likes.find((l: any) => l.user_id === user.id);
-
-    if (existingLike) {
+    if (existing) {
       await supabase
-        .from("community_post_likes")
+        .from("club_post_reactions")
         .delete()
-        .eq("id", existingLike.id);
+        .eq("id", existing.id);
     } else {
-      await supabase.from("community_post_likes").insert({
-        post_id: post.id,
-        user_id: user.id,
-      });
+      await supabase
+        .from("club_post_reactions")
+        .insert({
+          post_id: postId,
+          user_id: currentUserId,
+          reaction: "like",
+        });
     }
 
     await loadData();
   }
 
-  async function createComment(
-    e: React.FormEvent<HTMLFormElement>,
-    postId: string
-  ) {
-    e.preventDefault();
+  async function addComment(postId: string) {
+    const value = commentInputs[postId]?.trim();
 
-    if (!user) return;
+    if (!value || !currentUserId) return;
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const comment = String(formData.get("comment") || "").trim();
+    const { error } = await supabase
+      .from("club_post_comments")
+      .insert({
+        post_id: postId,
+        user_id: currentUserId,
+        content: value,
+      });
 
-    if (!comment) return;
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-    await supabase.from("community_comments").insert({
-      post_id: postId,
-      user_id: user.id,
-      content: comment,
-    });
+    setCommentInputs((prev) => ({
+      ...prev,
+      [postId]: "",
+    }));
 
-    form.reset();
     await loadData();
+  }
+
+  function formatDate(date: string) {
+    return new Date(date).toLocaleDateString("es-UY", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   }
 
   if (loading) {
     return (
-      <SocioShell clubId={clubId}>
-        <p>Cargando comunidad...</p>
+      <SocioShell>
+        <div style={loadingBox}>
+          Cargando comunidad...
+        </div>
       </SocioShell>
     );
   }
 
+  const clubName = club?.name || "Club";
+
   return (
-    <SocioShell clubId={clubId}>
-      <div style={{ maxWidth: 920, margin: "0 auto" }}>
-        <section
-          style={{
-            background: "white",
-            border: "1px solid #E5E1DA",
-            borderRadius: 32,
-            padding: 28,
-            marginBottom: 20,
-            boxShadow: "0 8px 20px rgba(0,0,0,0.04)",
-          }}
-        >
-          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <div
-              style={{
-                width: 50,
-                height: 50,
-                borderRadius: 18,
-                background: "#76A889",
-                color: "white",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <Users size={24} />
-            </div>
+    <SocioShell>
+      <div style={container}>
+        <header style={header}>
+          <h1 style={title}>Comunidad</h1>
 
-            <div>
-              <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>
-                Comunidad privada
-              </p>
-              <h1 style={{ margin: 0, fontSize: 32, fontWeight: 800 }}>
-                {club?.name ?? "Club"}
-              </h1>
-            </div>
-          </div>
-
-          <p style={{ marginTop: 14, color: "#6B7280", lineHeight: 1.5 }}>
-            Publicaciones internas, comentarios y participación privada entre
-            socios registrados del club.
+          <p style={subtitle}>
+            Publicaciones privadas del club.
           </p>
-        </section>
+        </header>
 
-        <form
-          onSubmit={createPost}
-          style={{
-            background: "white",
-            border: "1px solid #E5E1DA",
-            borderRadius: 26,
-            padding: 22,
-            marginBottom: 22,
-            boxShadow: "0 8px 20px rgba(0,0,0,0.04)",
-          }}
-        >
-          <label style={{ display: "block", fontWeight: 800, marginBottom: 10 }}>
-            Compartir con la comunidad
-          </label>
-
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Escribí una publicación interna..."
-            style={{
-              width: "100%",
-              minHeight: 110,
-              borderRadius: 18,
-              padding: 14,
-              border: "1px solid #E5E1DA",
-              outline: "none",
-              resize: "vertical",
-              fontFamily: "inherit",
-              fontSize: 15,
-              boxSizing: "border-box",
-              background: "#FBF9F6",
-            }}
-          />
-
-          <button
-            type="submit"
-            style={{
-              marginTop: 12,
-              width: "100%",
-              background: "#76A889",
-              color: "white",
-              padding: 13,
-              borderRadius: 16,
-              border: 0,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            Publicar
-          </button>
-        </form>
-
-        <div style={{ display: "grid", gap: 18 }}>
-          {posts.length === 0 && (
-            <div
-              style={{
-                background: "white",
-                border: "1px solid #E5E1DA",
-                borderRadius: 24,
-                padding: 24,
-                color: "#6B7280",
-                textAlign: "center",
-              }}
-            >
-              Todavía no hay publicaciones. Sé la primera persona en compartir
-              algo dentro de la comunidad.
-            </div>
-          )}
-
+        <section style={feed}>
           {posts.map((post) => {
-            const postName = getDisplayName(post.profile, user?.email);
-            const liked = post.likes.some(
-              (l: any) => l.user_id === user?.id
+            const postImages =
+              post.image_urls?.length
+                ? post.image_urls
+                : post.image_url
+                ? [post.image_url]
+                : [];
+
+            const postComments = comments.filter(
+              (comment) => comment.post_id === post.id
             );
 
-            return (
-              <article
-                key={post.id}
-                style={{
-                  background: "white",
-                  borderRadius: 28,
-                  padding: 22,
-                  border: "1px solid #E5E1DA",
-                  boxShadow: "0 8px 20px rgba(0,0,0,0.04)",
-                }}
-              >
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <Avatar profile={post.profile} fallback={user?.email} />
+            const postLikes = reactions.filter(
+              (reaction) =>
+                reaction.post_id === post.id &&
+                reaction.reaction === "like"
+            );
 
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 800 }}>
-                      @{postName}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 12, color: "#6B7280" }}>
-                      {formatDate(post.created_at)}
-                    </p>
+            const likedByMe = postLikes.some(
+              (reaction) =>
+                reaction.user_id === currentUserId
+            );
+
+            const activeImage =
+              activeImageIndexes[post.id] || 0;
+
+            return (
+              <article key={post.id} style={postCard}>
+                <div style={postHeader}>
+                  <div style={postUser}>
+                    <div style={avatar}>
+                      {clubName.slice(0, 1).toUpperCase()}
+                    </div>
+
+                    <div>
+                      <p style={postAuthor}>
+                        {clubName}
+                      </p>
+
+                      <p style={postDate}>
+                        {formatDate(post.created_at)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <p
-                  style={{
-                    marginTop: 16,
-                    marginBottom: 0,
-                    whiteSpace: "pre-wrap",
-                    lineHeight: 1.6,
-                    color: "#172033",
-                  }}
-                >
+                <div style={tag}>
+                  {post.type || post.post_type || "aviso"}
+                </div>
+
+                <p style={postContent}>
                   {post.content}
                 </p>
 
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    marginTop: 18,
-                  }}
-                >
-                  <button
-                    onClick={() => toggleLike(post)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 7,
-                      padding: "7px 12px",
-                      borderRadius: 999,
-                      border: "1px solid #E5E1DA",
-                      background: liked ? "#FEE2E2" : "#FBF9F6",
-                      color: liked ? "#B91C1C" : "#172033",
-                      cursor: "pointer",
-                      fontWeight: 700,
-                    }}
-                  >
-                    <Heart size={16} fill={liked ? "#B91C1C" : "none"} />
-                    {post.likes.length}
-                  </button>
+                {!!postImages.length && (
+                  <div style={carouselContainer}>
+                    <img
+                      src={postImages[activeImage]}
+                      alt="post"
+                      style={postImage}
+                    />
 
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 7,
-                      padding: "7px 12px",
-                      borderRadius: 999,
-                      border: "1px solid #E5E1DA",
-                      background: "#FBF9F6",
-                      color: "#172033",
-                      fontWeight: 700,
-                    }}
-                  >
-                    <MessageCircle size={16} />
-                    {post.comments.length}
-                  </div>
-                </div>
-
-                {post.comments.length > 0 && (
-                  <div style={{ marginTop: 16, display: "grid", gap: 9 }}>
-                    {post.comments.map((comment: any) => {
-                      const commentName = getDisplayName(
-                        comment.profile,
-                        comment.user_id === user?.id ? user?.email : "socio"
-                      );
-
-                      return (
-                        <div
-                          key={comment.id}
+                    {postImages.length > 1 && (
+                      <>
+                        <button
                           style={{
-                            background: "#FBF9F6",
-                            border: "1px solid #E5E1DA",
-                            borderRadius: 16,
-                            padding: "10px 12px",
-                            display: "flex",
-                            gap: 10,
+                            ...carouselButton,
+                            left: 14,
                           }}
+                          onClick={() =>
+                            setActiveImageIndexes(
+                              (prev: any) => ({
+                                ...prev,
+                                [post.id]:
+                                  activeImage === 0
+                                    ? postImages.length - 1
+                                    : activeImage - 1,
+                              })
+                            )
+                          }
                         >
-                          <Avatar profile={comment.profile} fallback={commentName} />
+                          ←
+                        </button>
 
-                          <div>
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: 13,
-                                fontWeight: 800,
-                                color: "#172033",
-                              }}
-                            >
-                              @{commentName}
-                            </p>
-                            <p
-                              style={{
-                                margin: "4px 0 0",
-                                fontSize: 14,
-                                color: "#374151",
-                                lineHeight: 1.4,
-                              }}
-                            >
-                              {comment.content}
-                            </p>
-                          </div>
+                        <button
+                          style={{
+                            ...carouselButton,
+                            right: 14,
+                          }}
+                          onClick={() =>
+                            setActiveImageIndexes(
+                              (prev: any) => ({
+                                ...prev,
+                                [post.id]:
+                                  activeImage >=
+                                  postImages.length - 1
+                                    ? 0
+                                    : activeImage + 1,
+                              })
+                            )
+                          }
+                        >
+                          →
+                        </button>
+
+                        <div style={carouselDots}>
+                          {postImages.map(
+                            (_: any, index: number) => (
+                              <div
+                                key={index}
+                                style={{
+                                  ...carouselDot,
+                                  opacity:
+                                    activeImage === index
+                                      ? 1
+                                      : 0.3,
+                                }}
+                              />
+                            )
+                          )}
                         </div>
-                      );
-                    })}
+                      </>
+                    )}
                   </div>
                 )}
 
-                <form
-                  onSubmit={(e) => createComment(e, post.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginTop: 16,
-                  }}
-                >
-                  <input
-                    name="comment"
-                    placeholder="Escribir comentario..."
-                    style={{
-                      flex: 1,
-                      padding: "11px 14px",
-                      borderRadius: 999,
-                      border: "1px solid #E5E1DA",
-                      outline: "none",
-                      background: "#FBF9F6",
-                      fontSize: 14,
-                    }}
-                  />
-
+                <div style={postFooter}>
                   <button
-                    type="submit"
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: "50%",
-                      background: "#12372A",
-                      color: "white",
-                      border: 0,
-                      display: "grid",
-                      placeItems: "center",
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
+                    type="button"
+                    onClick={() =>
+                      toggleLike(post.id)
+                    }
+                    style={
+                      likedByMe
+                        ? reactionActive
+                        : reaction
+                    }
                   >
-                    <Send size={16} />
+                    <Heart size={16} />
+                    {postLikes.length}
                   </button>
-                </form>
+
+                  <div style={reaction}>
+                    <MessageCircle size={16} />
+                    {postComments.length}
+                  </div>
+                </div>
+
+                <div style={commentsBox}>
+                  {postComments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      style={commentRow}
+                    >
+                      <div style={commentAvatar}>
+                        {(
+                          comment.profiles
+                            ?.full_name || "S"
+                        )
+                          .slice(0, 1)
+                          .toUpperCase()}
+                      </div>
+
+                      <div style={commentBubble}>
+                        <p style={commentAuthor}>
+                          {comment.profiles
+                            ?.full_name ||
+                            comment.profiles?.email ||
+                            "Socio"}
+                        </p>
+
+                        <p style={commentText}>
+                          {comment.content}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div style={commentInputRow}>
+                    <input
+                      value={
+                        commentInputs[post.id] || ""
+                      }
+                      onChange={(e) =>
+                        setCommentInputs((prev) => ({
+                          ...prev,
+                          [post.id]:
+                            e.target.value,
+                        }))
+                      }
+                      placeholder="Escribir comentario..."
+                      style={commentInput}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        addComment(post.id)
+                      }
+                      style={commentButton}
+                    >
+                      <Send size={15} />
+                    </button>
+                  </div>
+                </div>
               </article>
             );
           })}
-        </div>
+        </section>
       </div>
     </SocioShell>
   );
 }
+
+const container: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 980,
+  margin: "0 auto",
+};
+
+const header: React.CSSProperties = {
+  marginBottom: 28,
+};
+
+const title: React.CSSProperties = {
+  margin: 0,
+  fontSize: 46,
+  fontWeight: 950,
+  color: "#FFFFFF",
+};
+
+const subtitle: React.CSSProperties = {
+  margin: "10px 0 0",
+  color: "#9B9B9B",
+};
+
+const feed: React.CSSProperties = {
+  display: "grid",
+  gap: 24,
+};
+
+const postCard: React.CSSProperties = {
+  background: "#101010",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 32,
+  padding: 26,
+};
+
+const postHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+};
+
+const postUser: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+};
+
+const avatar: React.CSSProperties = {
+  width: 48,
+  height: 48,
+  borderRadius: 999,
+  background: "rgba(139,224,0,0.12)",
+  color: "#8BE000",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 950,
+};
+
+const postAuthor: React.CSSProperties = {
+  margin: 0,
+  fontWeight: 900,
+  color: "#FFFFFF",
+};
+
+const postDate: React.CSSProperties = {
+  margin: "4px 0 0",
+  color: "#8B8B8B",
+  fontSize: 13,
+};
+
+const tag: React.CSSProperties = {
+  marginTop: 18,
+  display: "inline-flex",
+  padding: "8px 14px",
+  borderRadius: 999,
+  background: "rgba(139,224,0,0.12)",
+  color: "#8BE000",
+  fontWeight: 900,
+  fontSize: 12,
+  textTransform: "capitalize",
+};
+
+const postContent: React.CSSProperties = {
+  margin: "18px 0 0",
+  color: "#F0F0F0",
+  lineHeight: 1.8,
+  fontSize: 17,
+  whiteSpace: "pre-wrap",
+};
+
+const carouselContainer: React.CSSProperties = {
+  position: "relative",
+  marginTop: 20,
+  borderRadius: 24,
+  overflow: "hidden",
+  background: "#0B0B0B",
+  maxWidth: 720,
+};
+
+const postImage: React.CSSProperties = {
+  width: "100%",
+  maxHeight: 520,
+  objectFit: "cover",
+  display: "block",
+};
+
+const carouselButton: React.CSSProperties = {
+  position: "absolute",
+  top: "50%",
+  transform: "translateY(-50%)",
+  width: 42,
+  height: 42,
+  borderRadius: 999,
+  border: "none",
+  background: "rgba(0,0,0,0.65)",
+  color: "#FFFFFF",
+  cursor: "pointer",
+  fontWeight: 900,
+  zIndex: 5,
+};
+
+const carouselDots: React.CSSProperties = {
+  position: "absolute",
+  bottom: 14,
+  left: "50%",
+  transform: "translateX(-50%)",
+  display: "flex",
+  gap: 8,
+};
+
+const carouselDot: React.CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  background: "#FFFFFF",
+};
+
+const postFooter: React.CSSProperties = {
+  display: "flex",
+  gap: 20,
+  marginTop: 20,
+};
+
+const reaction: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#B8B8B8",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+};
+
+const reactionActive: React.CSSProperties = {
+  ...reaction,
+  color: "#8BE000",
+  fontWeight: 900,
+};
+
+const commentsBox: React.CSSProperties = {
+  marginTop: 20,
+  display: "grid",
+  gap: 12,
+};
+
+const commentRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+};
+
+const commentAvatar: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  background: "rgba(139,224,0,0.12)",
+  color: "#8BE000",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 900,
+  flexShrink: 0,
+};
+
+const commentBubble: React.CSSProperties = {
+  background: "#0B0B0B",
+  borderRadius: 18,
+  padding: "10px 12px",
+  width: "100%",
+};
+
+const commentAuthor: React.CSSProperties = {
+  margin: 0,
+  fontWeight: 900,
+  fontSize: 13,
+  color: "#FFFFFF",
+};
+
+const commentText: React.CSSProperties = {
+  margin: "5px 0 0",
+  color: "#D8D8D8",
+};
+
+const commentInputRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+};
+
+const commentInput: React.CSSProperties = {
+  flex: 1,
+  background: "#0B0B0B",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 999,
+  color: "#FFFFFF",
+  padding: "12px 16px",
+  outline: "none",
+};
+
+const commentButton: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 999,
+  border: "none",
+  background: "#8BE000",
+  color: "#050505",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+};
+
+const loadingBox: React.CSSProperties = {
+  background: "#101010",
+  borderRadius: 20,
+  padding: 24,
+  color: "#FFFFFF",
+};

@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { CreditCard, ShieldCheck, Users } from "lucide-react";
-
 export default function HomePage() {
   return (
     <main
